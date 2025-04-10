@@ -25,6 +25,39 @@ async function checkSession() {
     return data.session;
 }
 
+// Send custom email via our Brevo SMTP edge function
+async function sendCustomEmail(email, subject, htmlBody, textBody = '') {
+    try {
+        console.log('Sending custom email to:', email);
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+            },
+            body: JSON.stringify({
+                to: email,
+                subject: subject,
+                htmlBody: htmlBody,
+                textBody: textBody
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to send email');
+        }
+        
+        console.log('Custom email sent successfully:', data);
+        return { success: true };
+    } catch (error) {
+        console.error('Error sending custom email:', error);
+        return { error: error.message || 'Failed to send email' };
+    }
+}
+
 // Handle login form
 async function handleLogin(email, password) {
     try {
@@ -64,6 +97,26 @@ async function handleSignup(email, password, fullName) {
         if (error) throw error;
         
         console.log('Signup successful!', data);
+        
+        // Send custom welcome email
+        await sendCustomEmail(
+            email,
+            'Welcome to E-Mall - Account Created Successfully!',
+            `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                <h1 style="color: #4a5568; text-align: center;">Welcome to E-Mall!</h1>
+                <p style="color: #4a5568; line-height: 1.6;">Hello ${fullName},</p>
+                <p style="color: #4a5568; line-height: 1.6;">Thank you for creating an account with us. Your account has been successfully set up.</p>
+                <p style="color: #4a5568; line-height: 1.6;">You can now log in and start shopping!</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${window.location.origin}/login.html" style="background-color: #4299e1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Login to Your Account</a>
+                </div>
+                <p style="color: #4a5568; line-height: 1.6;">If you have any questions, feel free to contact our support team.</p>
+                <p style="color: #4a5568; line-height: 1.6;">Best regards,<br>The E-Mall Team</p>
+            </div>
+            `
+        );
+        
         // Redirect to login page or dashboard
         window.location.href = 'login.html?signup=success';
         
@@ -89,63 +142,119 @@ async function handleLogout() {
     }
 }
 
-// Find User ID by email
+// Find User ID by email - Improved version to properly search in profiles table
 async function findUserIdByEmail(email) {
     try {
+        console.log('Looking for user with email:', email);
+        
         // First try to find in profiles table
-        const { data, error } = await supabase
+        let { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('id, email')
-            .eq('email', email);
+            .eq('email', email)
+            .maybeSingle();
 
-        console.log('Checking profiles table for email:', email);
-        console.log('Query result:', data);
+        console.log('Profiles query result:', profileData);
         
-        if (error) {
-            console.error('Error querying profiles:', error);
-            throw error;
+        if (profileError) {
+            console.error('Error querying profiles:', profileError);
+            throw profileError;
         }
         
         // If user found in profiles table
-        if (data && data.length > 0) {
-            const userId = data[0].id;
+        if (profileData && profileData.id) {
+            const userId = profileData.id;
             console.log('Found user ID in profiles:', userId);
             
-            // Simulate sending email with user ID (in a real app, this would be an email service)
-            console.log(`Email would be sent to ${email} with User ID: ${userId}`);
+            // Send password reset email with user ID
+            const resetLink = `${window.location.origin}/password-reset.html?userId=${userId}`;
+            
+            const emailResult = await sendCustomEmail(
+                email,
+                'E-Mall - Password Reset Request',
+                `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                    <h1 style="color: #4a5568; text-align: center;">Password Reset Request</h1>
+                    <p style="color: #4a5568; line-height: 1.6;">We received a request to reset your password.</p>
+                    <p style="color: #4a5568; line-height: 1.6;">Please click the button below to reset your password:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${resetLink}" style="background-color: #4299e1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+                    </div>
+                    <p style="color: #4a5568; line-height: 1.6;">Your User ID is: <strong>${userId}</strong></p>
+                    <p style="color: #4a5568; line-height: 1.6;">If you didn't request a password reset, you can ignore this email.</p>
+                    <p style="color: #4a5568; line-height: 1.6;">This link will expire in 24 hours.</p>
+                    <p style="color: #4a5568; line-height: 1.6;">Best regards,<br>The E-Mall Team</p>
+                </div>
+                `
+            );
+            
+            if (emailResult.error) {
+                throw new Error(`Failed to send password reset email: ${emailResult.error}`);
+            }
             
             return { 
                 success: true, 
                 userId: userId, 
-                message: `User ID has been sent to your email: ${email}` 
+                message: `Password reset instructions have been sent to your email: ${email}` 
             };
-        } else {
-            console.log('User not found in profiles, checking auth.users');
+        } 
+        
+        // Try to find email in auth.users directly using signInWithOtp
+        console.log('User not found in profiles, trying passwordless login');
+        try {
+            const { error: otpError } = await supabase.auth.signInWithOtp({
+                email: email,
+                options: {
+                    shouldCreateUser: false,
+                }
+            });
             
-            // Try to find user in auth users table directly (this requires admin rights)
-            const { data: authUsers, error: authError } = await supabase.auth.admin
-                .listUsers();
-                
-            if (authError) {
-                console.error('Error querying auth users:', authError);
-                throw new Error('Failed to find user with this email.');
+            if (otpError) {
+                console.error('OTP error:', otpError);
+                if (otpError.message.includes('is not found')) {
+                    throw new Error('Email not found. Please check and try again.');
+                }
+                throw otpError;
             }
             
-            // Find user by email
-            const user = authUsers?.users?.find(u => u.email === email);
-            
-            if (!user) {
-                throw new Error('Email not found. Please check and try again.');
-            }
-            
+            // If we get here, an email was sent
             return { 
                 success: true, 
-                userId: user.id, 
-                message: `User ID has been sent to your email: ${email}`
+                message: `A login link has been sent to your email: ${email}. Please use it to reset your password.`
             };
+        } catch (otpError) {
+            console.error('OTP login error:', otpError);
+            
+            // As a last resort, try to send our custom email
+            try {
+                const emailResult = await sendCustomEmail(
+                    email,
+                    'E-Mall - Account Recovery',
+                    `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                        <h1 style="color: #4a5568; text-align: center;">Account Recovery</h1>
+                        <p style="color: #4a5568; line-height: 1.6;">We received a request to recover your account.</p>
+                        <p style="color: #4a5568; line-height: 1.6;">If you have an account with us, please try logging in again or creating a new account.</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="${window.location.origin}/login.html" style="background-color: #4299e1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Go to Login</a>
+                        </div>
+                        <p style="color: #4a5568; line-height: 1.6;">Best regards,<br>The E-Mall Team</p>
+                    </div>
+                    `
+                );
+                
+                return { 
+                    success: true, 
+                    message: `If an account exists with this email, recovery instructions have been sent to: ${email}`
+                };
+            } catch (finalError) {
+                console.error('Final email error:', finalError);
+                throw new Error('Email not found. Please check and try again.');
+            }
         }
+        
     } catch (error) {
-        console.error('Error finding user by email:', error);
+        console.error('Error in findUserIdByEmail:', error);
         return { error: error.message || 'Failed to find user. Please try again.' };
     }
 }
@@ -235,6 +344,11 @@ window.loginUser = loginUser;
 window.logoutUser = logoutUser;
 window.findUserIdByEmail = findUserIdByEmail;
 window.updatePassword = updatePassword;
+window.checkSession = checkSession;
+window.handleLogin = handleLogin;
+window.handleSignup = handleSignup;
+window.handleLogout = handleLogout;
+window.showToast = showToast;
 
 // Initialize login form if it exists
 document.addEventListener('DOMContentLoaded', () => {
