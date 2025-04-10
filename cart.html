@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Mall | Cart</title>
+    <link rel="stylesheet" href="home.css">
+    <link rel="stylesheet" href="cart.css">
+    <link rel="icon" href="2.jpg" type="image/jpeg">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3.11.0/dist/email.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+</head>
+<body>
+    <!-- Navbar -->
+<header class="navbar">
+  <div class="container">
+    <div class="logo">
+      <a href="home.html">E-Mall</a>
+    </div>
+    <nav class="nav-links">
+      <a href="home.html">Home</a>
+      <a href="product.html">Products</a>
+    </nav>
+    <div class="nav-actions">
+      <a href="cart.html" class="icon-btn cart-btn">
+        <i class="fas fa-shopping-cart"></i>
+        <span class="cart-count">0</span>
+      </a>
+      <a href="wishlist.html" class="icon-btn wishlist-btn">
+        <i class="fas fa-heart"></i>
+        <span class="wishlist-count">0</span>
+      </a>
+      <a href="user.html" class="icon-btn">
+        <i class="fas fa-user"></i>
+      </a>
+      <button class="icon-btn" id="menu-toggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu-header">
+    <div class="logo">E-Mall</div>
+    <button class="close-menu" id="close-menu">
+      <i class="fas fa-times-circle"></i>
+    </button>
+  </div>
+  <nav class="mobile-nav-links">
+    <a href="home.html" class="mobile-nav-link">Home</a>
+    <a href="product.html" class="mobile-nav-link">Products</a>
+    <a href="cart.html" class="mobile-nav-link">Cart</a>
+    <a href="wishlist.html" class="mobile-nav-link">Wishlist</a>
+    <a href="user.html" class="mobile-nav-link">Profile</a>
+    <a href="advert.html" class="mobile-nav-link">Advertise</a>
+  </nav>
+</div>
+
+    <!-- Cart Page Content -->
+    <div class="cart-container">
+        <div class="container">
+            <div class="cart-header">
+                <h1 class="cart-title">Shopping Cart</h1>
+                <p class="cart-subtitle">Manage your cart and proceed to checkout</p>
+            </div>
+
+            <div class="cart-content">
+                <div class="cart-wrapper">
+                    <!-- Cart Items -->
+                    <div class="cart-items" id="cart-items">
+                        <!-- Cart items will be dynamically added here -->
+                    </div>
+
+                    <!-- Cart Summary -->
+                    <div class="cart-summary" id="cart-summary">
+                        <h2 class="summary-title">Cart Summary</h2>
+                        <div class="summary-row subtotal">
+                            <span>Subtotal:</span>
+                            <span class="subtotal-value">₦0.00</span>
+                        </div>
+                        <div class="summary-row shipping">
+                            <span>Shipping:</span>
+                            <span class="shipping-value">₦0.00</span>
+                        </div>
+                        <div class="summary-row tax">
+                            <span>Tax (5%):</span>
+                            <span class="tax-value">₦0.00</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span>Total:</span>
+                            <span class="total-value">₦0.00</span>
+                        </div>
+                        <button class="checkout-btn" id="checkout-btn">Proceed to Checkout</button>
+                        <div class="cart-actions">
+                            <button class="clear-cart-btn">Clear Cart</button>
+                            <a href="wishlist.html" class="view-wishlist-btn">View Wishlist</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Empty Cart Message -->
+                <div class="cart-empty" id="cart-empty">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24">
+                        <path d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm2.3-8c-.46 0-.68-.54-.33-.85L16.5 6H7.3l-2.4 3.15c-.35.3-.13.85.33.85H19.3zM6 4l-1 2H2v2h2l.9 10H19l1-10h2V6h-3l-1-2H6z"/>
+                    </svg>
+                    <h2>Your cart is empty</h2>
+                    <p>Looks like you haven't added any items to your cart yet. Start shopping to fill it up!</p>
+                    <a href="shop.html" class="btn btn-primary">Shop Now</a>
+                </div>
+            </div>
+        </div>
+    </div>
+<!-- Footer -->
+<footer id="contact" class="footer">
+  <div class="container">
+    <div class="footer-content">
+      <div class="footer-column">
+        <a href="home.html"><h3 class="footer-title">E-Mall</h3></a>
+        <p class="footer-description">
+          Premium quality products for everyone. We believe in quality, affordability, and exceptional customer service.
+        </p>
+        <div class="social-links">
+          <a href="https://www.instagram.com/electro_mall_official?igsh=emNwNHZ0eGVvdTlu" class="social-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+          </a>
+          <a href="https://wa.me/message/I6QQCRAXF2MDF1" class="social-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+          </a>
+          <a href="mailto:ecommerxe01@gmail.com" class="social-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          </a>
+          <a href="tel:+2349046190879" class="social-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+          </a>
+        </div>
+      </div>
+      
+      <div class="footer-column">
+        <h4 class="footer-subtitle">Quick Links</h4>
+        <ul class="footer-links">
+          <li><a href="home.html" class="footer-link">Home</a></li>
+          <li><a href="#products" class="footer-link">Products</a></li>
+          <li><a href="home.html#featured" class="footer-link">Featured</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-column">
+        <h4 class="footer-subtitle">Customer Service</h4>
+        <ul class="footer-links">
+          <li><a href="help.html#contact" class="footer-link">Contact Us</a></li>
+          <li><a href="help.html" class="footer-link">FAQs</a></li>
+          <li><a href="help.html#shipping" class="footer-link">Shipping Policy</a></li>
+          <li><a href="help.html#returns" class="footer-link">Returns & Refunds</a></li>
+          <li><a href="terms of privacy.html#privacy-policy" class="footer-link">Privacy Policy</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-column">
+        <h4 class="footer-subtitle">Contact Info</h4>
+        <ul class="contact-list">
+          <li class="contact-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            <a href="mailto:ecommerxe01@gmail.com">ecommerxe01@gmail.com</a>
+          </li>
+          <li class="contact-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+            <a href="tel:+2349046190879">+234 904 619 0879</a>
+          </li>
+          <li class="contact-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            <div>
+              <a href="https://www.instagram.com/electro_mall_official?igsh=emNwNHZ0eGVvdTlu">Instagram</a>
+              <span class="separator">•</span>
+              <a href="https://wa.me/message/I6QQCRAXF2MDF1">WhatsApp</a>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="footer-bottom">
+      <p class="copyright">
+        © 2024 E-Mall. All rights reserved.
+      </p>
+      <div class="footer-bottom-links">
+        <a href="terms of privacy.html" class="footer-link">Terms of Service</a>
+        <a href="help.html" class="footer-link">Help Center</a>
+        <a href="update.html" class="footer-link">Updates</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+    <!-- Back to top button -->
+    <button class="back-to-top">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </button>
+
+
+    <!-- JavaScript - Move to end of body -->
+    <script src="cart.js"></script>
+</body>
+</html>
