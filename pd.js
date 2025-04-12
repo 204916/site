@@ -586,9 +586,174 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   }
   
-  // Add to cart function
-  function addToCart(productId, quantity = 1) {
-    // Get current cart from localStorage
+  // Toggle wishlist status
+async function toggleWishlist(productId) {
+  try {
+    // Get current wishlist from localStorage
+    let wishlist = JSON.parse(localStorage.getItem('wishlist') || '[]');
+    let isAdding = !wishlist.includes(productId);
+    
+    // Check if user is logged in
+    const user = await getCurrentUser();
+    
+    if (user) {
+      if (isAdding) {
+        // Add to Supabase wishlist
+        const { error } = await window.supabaseClient
+          .from('wishlist_items')
+          .insert({
+            user_id: user.id,
+            product_id: productId
+          });
+        
+        if (error) {
+          console.error('Error adding to wishlist:', error);
+          throw new Error('Failed to add product to wishlist');
+        }
+      } else {
+        // Remove from Supabase wishlist
+        const { error } = await window.supabaseClient
+          .from('wishlist_items')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('product_id', productId);
+        
+        if (error) {
+          console.error('Error removing from wishlist:', error);
+          throw new Error('Failed to remove product from wishlist');
+        }
+      }
+    }
+    
+    // Update localStorage wishlist for all users
+    if (isAdding) {
+      // Add to wishlist
+      wishlist.push(productId);
+      showToast('Product added to wishlist!');
+      
+      // Toggle active class on button if it exists
+      const wishlistBtn = document.querySelector(`.product-card[data-id="${productId}"] .wishlist-btn`);
+      if (wishlistBtn) {
+        wishlistBtn.classList.add('active');
+      }
+    } else {
+      // Remove from wishlist
+      wishlist = wishlist.filter(id => id !== productId);
+      showToast('Product removed from wishlist!');
+      
+      // Toggle active class on button if it exists
+      const wishlistBtn = document.querySelector(`.product-card[data-id="${productId}"] .wishlist-btn`);
+      if (wishlistBtn) {
+        wishlistBtn.classList.remove('active');
+      }
+    }
+    
+    // Update localStorage
+    localStorage.setItem('wishlist', JSON.stringify(wishlist));
+    
+    // Update wishlist count
+    updateWishlistCount();
+  } catch (error) {
+    console.error('Error toggling wishlist:', error);
+    showToast('Failed to update wishlist', 'error');
+  }
+}
+
+// Add to cart function
+async function addToCart(productId) {
+  try {
+    // Get product details first
+    const productResponse = await fetch(`${SUPABASE_URL}/rest/v1/products?id=eq.${productId}&select=*`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!productResponse.ok) {
+      throw new Error('Failed to fetch product details');
+    }
+    
+    const productData = await productResponse.json();
+    if (!productData || productData.length === 0) {
+      throw new Error('Product not found');
+    }
+    
+    const product = productData[0];
+    
+    // Get current user session
+    const user = await getCurrentUser();
+    
+    if (user) {
+      console.log('User authenticated:', user.id);
+      
+      // Ensure we have a supabase client instance
+      const supabaseClient = window.supabaseClient || window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      window.supabaseClient = supabaseClient;
+      
+      // Check if item already in cart using the supabase client
+      const { data: existingItems, error: checkError } = await supabaseClient
+        .from('cart_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('product_id', productId);
+      
+      if (checkError) {
+        console.error('Error checking cart:', checkError);
+        throw new Error('Failed to check if product is in cart');
+      }
+      
+      console.log('Existing items in cart:', existingItems);
+      
+      if (existingItems && existingItems.length > 0) {
+        // Update quantity
+        const existingItem = existingItems[0];
+        const newQuantity = existingItem.quantity + 1;
+        
+        console.log('Updating quantity for item:', existingItem.id, 'to', newQuantity);
+        
+        const { error: updateError } = await supabaseClient
+          .from('cart_items')
+          .update({ quantity: newQuantity })
+          .eq('id', existingItem.id);
+        
+        if (updateError) {
+          console.error('Error updating cart:', updateError);
+          throw new Error('Failed to update cart item quantity');
+        }
+        
+        console.log('Item quantity updated successfully');
+        showToast(`${product.name} quantity updated in cart!`);
+      } else {
+        // Add new item
+        console.log('Adding new item to cart:', {
+          user_id: user.id,
+          product_id: productId,
+          quantity: 1
+        });
+        
+        const { error: insertError } = await supabaseClient
+          .from('cart_items')
+          .insert({
+            user_id: user.id,
+            product_id: productId,
+            quantity: 1
+          });
+        
+        if (insertError) {
+          console.error('Error adding to cart:', insertError);
+          throw new Error('Failed to add item to cart');
+        }
+        
+        console.log('Item added to cart successfully');
+        showToast(`${product.name} added to cart!`);
+      }
+    } else {
+      console.log('User not logged in, storing in localStorage only');
+      showToast(`${product.name} added to cart!`);
+    }
+    
+    // Always update localStorage cart for fallback and offline use
     let cart = JSON.parse(localStorage.getItem('cart') || '[]');
     
     // Check if product already in cart
@@ -596,102 +761,72 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (existingItemIndex >= 0) {
       // Update quantity
-      cart[existingItemIndex].quantity += quantity;
-      // Save updated cart
-      localStorage.setItem('cart', JSON.stringify(cart));
-      
-      // Update cart count
-      updateCartCount();
-      
-      // Show updated toast
-      showToast(`Item quantity updated in cart!`);
+      cart[existingItemIndex].quantity += 1;
     } else {
-      // Fetch product details
-      fetch(`${SUPABASE_URL}/rest/v1/products?id=eq.${productId}&select=*`, {
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Content-Type': 'application/json'
-        }
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          const product = data[0];
-          cart.push({
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            discount: product.discount || 0,
-            image: product.image_url,
-            quantity: quantity
-          });
-          
-          // Save updated cart
-          localStorage.setItem('cart', JSON.stringify(cart));
-          
-          // Update cart count
-          updateCartCount();
-          
-          // Show added to cart toast
-          showToast(`${quantity} ${quantity > 1 ? 'items' : 'item'} added to cart!`);
-        }
-      })
-      .catch(error => {
-        console.error('Error adding to cart:', error);
-        showToast('Failed to add product to cart', 'error');
+      // Add new item
+      cart.push({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        discount: product.discount || 0,
+        image: product.image_url,
+        quantity: 1
       });
     }
+    
+    localStorage.setItem('cart', JSON.stringify(cart));
+    
+    // Update cart count
+    updateCartCount();
+    
+    return true;
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    showToast('Failed to add product to cart', 'error');
+    return false;
   }
-  
-  // Update cart count
-  function updateCartCount() {
-    const cart = JSON.parse(localStorage.getItem('cart') || '[]');
-    const count = cart.reduce((total, item) => total + item.quantity, 0);
+}
+
+// Update cart count
+async function updateCartCount() {
+  try {
     const cartCountElements = document.querySelectorAll('.cart-count');
-    cartCountElements.forEach(element => {
-      element.textContent = count;
-    });
-  }
-  
-  // Add to wishlist function
-  function addToWishlist(productId) {
-    // Get current wishlist from localStorage
-    let wishlist = JSON.parse(localStorage.getItem('wishlist') || '[]');
+    if (!cartCountElements || cartCountElements.length === 0) return;
     
-    // Check if product already in wishlist
-    if (!wishlist.includes(productId)) {
-      wishlist.push(productId);
-      localStorage.setItem('wishlist', JSON.stringify(wishlist));
-      showToast('Product added to wishlist!');
+    // Check if logged in
+    const user = await getCurrentUser();
+    
+    let count = 0;
+    
+    if (user) {
+      // Ensure we have a supabase client instance
+      const supabaseClient = window.supabaseClient || window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      window.supabaseClient = supabaseClient;
+      
+      // Get cart items from Supabase
+      const { data: cartItems, error } = await supabaseClient
+        .from('cart_items')
+        .select('quantity')
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Error fetching cart items:', error);
+      } else if (cartItems) {
+        count = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+      }
     } else {
-      wishlist = wishlist.filter(id => id !== productId);
-      localStorage.setItem('wishlist', JSON.stringify(wishlist));
-      showToast('Product removed from wishlist!');
+      // Get cart from localStorage when not logged in
+      const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+      count = cart.reduce((acc, item) => acc + item.quantity, 0);
     }
     
-    // Update wishlist count
-    updateWishlistCount();
-  }
-  
-  // Update wishlist count
-  function updateWishlistCount() {
-    const wishlist = JSON.parse(localStorage.getItem('wishlist') || '[]');
-    const count = wishlist.length;
-    const wishlistCountElements = document.querySelectorAll('.wishlist-count');
-    wishlistCountElements.forEach(element => {
-      element.textContent = count;
+    cartCountElements.forEach(countElement => {
+      countElement.textContent = count;
     });
+  } catch (error) {
+    console.error('Error updating cart count:', error);
   }
-  
-  // Toggle wishlist button
-  function toggleWishlistButton(button) {
-    button.classList.toggle('wishlist-active');
-    if (button.classList.contains('wishlist-active')) {
-      button.innerHTML = '<i class="fas fa-heart"></i>';
-    } else {
-      button.innerHTML = '<i class="far fa-heart"></i>';
-    }
-  }
+}
   
   // Generate star rating HTML
   function getStarRating(rating) {
