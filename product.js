@@ -42,7 +42,7 @@ function initializeApp() {
 let allProducts = [];
 let filteredProducts = [];
 let currentPage = 1;
-const productsPerPage = 8;
+const productsPerPage = 50;
 
 // Supabase configuration
 const SUPABASE_URL = "https://rpusltqaadfbabzkcull.supabase.co";
