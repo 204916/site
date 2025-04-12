@@ -1,4 +1,3 @@
-
 // Initialize Supabase client
 const SUPABASE_URL = "https://rpusltqaadfbabzkcull.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJwdXNsdHFhYWRmYmFiemtjdWxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2MjU4NjAsImV4cCI6MjA1NTIwMTg2MH0.fpiYDehk0F2bLX8TVqGmVB1lIpR8ZgcLKbkPmo6PORk";
@@ -11,437 +10,58 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // DOM elements
-const advertForm = document.getElementById('advert-form');
-const advertTitle = document.getElementById('advert-title');
-const advertContent = document.getElementById('advert-content');
-const contactEmail = document.getElementById('contact-email');
-const advertImage = document.getElementById('advert-image');
-const imagePreview = document.getElementById('image-preview');
-const tierRadios = document.querySelectorAll('input[name="tier"]');
-const submitButton = document.getElementById('submit-advert');
-const statusMessage = document.getElementById('status-message');
-const advertsContainer = document.getElementById('adverts-container');
+const userNameElement = document.getElementById('user-name');
+const mobileUserNameElement = document.getElementById('mobile-user-name');
 const userBalanceElement = document.getElementById('user-balance');
-const wishlistCountElement = document.getElementById('wishlist-count');
+const logoutButton = document.getElementById('logout-btn');
+const mobileLogoutButton = document.getElementById('mobile-logout-btn');
+const advertForm = document.getElementById('advert-form');
+const formMessage = document.getElementById('form-message');
+const advertsContainer = document.getElementById('adverts-container');
 const cartCountElement = document.getElementById('cart-count');
-const notificationElement = document.getElementById('notification');
+const mobileCartCountElement = document.getElementById('mobile-cart-count');
+const wishlistCountElement = document.getElementById('wishlist-count');
+const mobileWishlistCountElement = document.getElementById('mobile-wishlist-count');
+const userIcon = document.getElementById('user-icon');
+const userDropdown = document.querySelector('.user-dropdown');
+const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+const mobileMenuClose = document.getElementById('mobile-menu-close');
+const mobileMenu = document.getElementById('mobile-menu');
 
 // Variables
 let currentUser = null;
 let userProfile = null;
+let advertsChannel = null;
 let viewedAdvertIds = new Set(); // Track adverts that the user has already viewed
 let viewTimeouts = {}; // Track timeouts for view duration tracking
-let imageFile = null;
-let freeAdvertCooldown = false; // Flag for checking if user is in cooldown period
 
 // Minimum time in milliseconds that an ad must be visible to count as a view
-const MIN_VIEW_TIME = 2000; // 2 seconds
+const MIN_VIEW_TIME = 2000; // 2 seconds, similar to Instagram's approach
 
 // Intersection Observer to detect when adverts come into view
 let observer = null;
 
-// Polling interval for fetching updated view counts (in milliseconds)
-const VIEW_COUNT_POLL_INTERVAL = 5000; // 5 seconds
-
-// Tier pricing and durations
-const tierConfig = {
-  free: { price: 0, days: 1, priority: 1, cooldownDays: 7, cooldownPrice: 5000 },
-  basic: { price: 3000, days: 3, priority: 3 },
-  premium: { price: 7000, days: 7, priority: 7 },
-  ultra: { price: 10000, days: 30, priority: 10 }
-};
-
-// Initialize the page
-document.addEventListener('DOMContentLoaded', () => {
-  checkAuth();
-  setupImagePreview();
-  setupFormSubmission();
-});
-
-// Check if the user is authenticated
+// Check if user is authenticated
 async function checkAuth() {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      showNotification('Authentication error. Please log in again.', 'error');
-      console.error('Error checking auth status:', error);
-      redirectToLogin();
-      return;
-    }
-    
-    if (data.session) {
-      currentUser = data.session.user;
-      await getUserProfile();
-      await fetchWishlistCount();
-      await fetchCartCount();
-      await fetchAdvertisements();
-      setupIntersectionObserver();
-      startViewCountPolling();
-      
-      // Check if user has used free advert recently
-      await checkFreeAdvertCooldown();
-    } else {
-      redirectToLogin();
-    }
-  } catch (error) {
-    console.error('Error in checkAuth:', error);
-    showNotification('Error checking authentication.', 'error');
+  const { data, error } = await supabase.auth.getSession();
+  
+  if (error) {
+    console.error('Error checking auth status:', error);
+    return;
   }
-}
-
-// Redirect to login page
-function redirectToLogin() {
-  window.location.href = 'home.html';
-}
-
-// Get user profile data including balance
-async function getUserProfile() {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .single();
+  
+  if (data.session) {
+    currentUser = data.session.user;
+    await fetchUserProfile();
+    await fetchCartCount();
+    await fetchWishlistCount();
+    updateUI();
     
-    if (error) {
-      console.error('Error fetching user profile:', error);
-      return;
-    }
-    
-    userProfile = data;
-    updateBalanceDisplay();
-  } catch (error) {
-    console.error('Error in getUserProfile:', error);
-  }
-}
-
-// Update balance display in the header
-function updateBalanceDisplay() {
-  if (userProfile && userProfile.balance !== null) {
-    userBalanceElement.textContent = `₦${userProfile.balance.toLocaleString()}`;
+    // Set up the observer now that we have a user
+    setupIntersectionObserver();
   } else {
-    userBalanceElement.textContent = '₦0.00';
-  }
-}
-
-// Fetch the number of wishlist items
-async function fetchWishlistCount() {
-  try {
-    const { count, error } = await supabase
-      .from('wishlist_items')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', currentUser.id);
-    
-    if (error) {
-      console.error('Error fetching wishlist count:', error);
-      return;
-    }
-    
-    wishlistCountElement.textContent = count || '0';
-  } catch (error) {
-    console.error('Error in fetchWishlistCount:', error);
-  }
-}
-
-// Fetch the number of cart items
-async function fetchCartCount() {
-  try {
-    const { count, error } = await supabase
-      .from('cart_items')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', currentUser.id);
-    
-    if (error) {
-      console.error('Error fetching cart count:', error);
-      return;
-    }
-    
-    cartCountElement.textContent = count || '0';
-  } catch (error) {
-    console.error('Error in fetchCartCount:', error);
-  }
-}
-
-// Check if the user is in a cooldown period for free adverts
-async function checkFreeAdvertCooldown() {
-  try {
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
-    const { data, error } = await supabase
-      .from('advertise')
-      .select('id, date_created')
-      .eq('user_id', currentUser.id)
-      .eq('tier', 'free')
-      .gt('date_created', oneWeekAgo.toISOString())
-      .order('date_created', { ascending: false })
-      .limit(1);
-    
-    if (error) {
-      console.error('Error checking free advert cooldown:', error);
-      return;
-    }
-    
-    if (data && data.length > 0) {
-      // User has posted a free advert in the last week
-      const usageDays = Math.ceil((new Date() - new Date(data[0].date_created)) / (1000 * 60 * 60 * 24));
-      
-      if (usageDays <= 1) {
-        // User has used their free ad within the last day
-        freeAdvertCooldown = false;
-      } else {
-        // User is in cooldown period (must pay)
-        freeAdvertCooldown = true;
-        
-        // Update the free tier label to show cooldown price
-        const freeTierPriceElement = document.querySelector('label[for="tier-free"] .tier-price');
-        if (freeTierPriceElement) {
-          freeTierPriceElement.textContent = `₦${tierConfig.free.cooldownPrice.toLocaleString()}`;
-          
-          // Add cooldown note to the free tier details
-          const freeTierDetails = document.querySelector('label[for="tier-free"] .tier-details ul');
-          if (freeTierDetails) {
-            const cooldownNote = document.createElement('li');
-            cooldownNote.style.color = '#e41e3f';
-            cooldownNote.textContent = 'Cooldown price applies';
-            freeTierDetails.appendChild(cooldownNote);
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error in checkFreeAdvertCooldown:', error);
-  }
-}
-
-// Set up image preview functionality
-function setupImagePreview() {
-  advertImage.addEventListener('change', function(event) {
-    const file = event.target.files[0];
-    
-    if (file) {
-      imageFile = file;
-      const reader = new FileReader();
-      
-      reader.onload = function(e) {
-        imagePreview.innerHTML = `<img src="${e.target.result}" alt="Advert image preview">`;
-      };
-      
-      reader.readAsDataURL(file);
-    } else {
-      imagePreview.innerHTML = '';
-      imageFile = null;
-    }
-  });
-}
-
-// Set up form submission
-function setupFormSubmission() {
-  advertForm.addEventListener('submit', async function(event) {
-    event.preventDefault();
-    
-    if (!currentUser) {
-      showNotification('You must be logged in to post advertisements', 'error');
-      return;
-    }
-    
-    submitButton.disabled = true;
-    submitButton.textContent = 'Processing...';
-    
-    try {
-      // Get selected tier
-      let selectedTier = '';
-      for (const radio of tierRadios) {
-        if (radio.checked) {
-          selectedTier = radio.value;
-          break;
-        }
-      }
-      
-      // Get tier information
-      const tier = tierConfig[selectedTier];
-      
-      // Calculate price (accounting for free tier cooldown)
-      let price = tier.price;
-      if (selectedTier === 'free' && freeAdvertCooldown) {
-        price = tierConfig.free.cooldownPrice;
-      }
-      
-      // Check if user has enough balance
-      if (price > 0 && (!userProfile || userProfile.balance < price)) {
-        showStatusMessage('Insufficient balance to post this advertisement', 'error');
-        return;
-      }
-      
-      // Calculate expiry date based on tier
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + tier.days);
-      
-      // Upload image if provided
-      let imageUrl = null;
-      if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
-      }
-      
-      // Create the advertisement
-      const advertData = {
-        user_id: currentUser.id,
-        title: advertTitle.value,
-        content: advertContent.value,
-        contact_email: contactEmail.value,
-        tier: selectedTier,
-        expiry_date: expiryDate.toISOString(),
-        display_priority: tier.priority,
-        image_url: imageUrl
-      };
-      
-      const { data, error } = await supabase
-        .from('advertise')
-        .insert(advertData)
-        .select();
-      
-      if (error) {
-        console.error('Error creating advertisement:', error);
-        showStatusMessage('Failed to create advertisement: ' + error.message, 'error');
-        return;
-      }
-      
-      // Update user's balance (deduct the price)
-      if (price > 0) {
-        const { data: updatedProfile, error: balanceError } = await supabase
-          .from('profiles')
-          .update({ balance: userProfile.balance - price })
-          .eq('id', currentUser.id)
-          .select();
-        
-        if (balanceError) {
-          console.error('Error updating balance:', balanceError);
-        } else {
-          userProfile = updatedProfile[0];
-          updateBalanceDisplay();
-        }
-      }
-      
-      showStatusMessage('Advertisement created successfully!', 'success');
-      advertForm.reset();
-      imagePreview.innerHTML = '';
-      
-      // Refresh advertisements list
-      await fetchAdvertisements();
-      
-      // Check for consecutive months reward
-      checkForConsecutiveMonthsReward();
-      
-    } catch (error) {
-      console.error('Error submitting advertisement:', error);
-      showStatusMessage('An unexpected error occurred', 'error');
-    } finally {
-      submitButton.disabled = false;
-      submitButton.textContent = 'Post Advertisement';
-    }
-  });
-}
-
-// Upload image to storage
-async function uploadImage(file) {
-  try {
-    // Generate a unique file name based on timestamp and random string
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-    const filePath = `adverts/${fileName}`;
-    
-    // Convert image to base64 string
-    const reader = new FileReader();
-    const imageBase64 = await new Promise((resolve) => {
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.readAsDataURL(file);
-    });
-    
-    // Store the image as a data URL in the database
-    // In a production environment, you'd want to use proper storage
-    return `data:image/${fileExt};base64,${imageBase64}`;
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    throw error;
-  }
-}
-
-// Check for consecutive months reward
-async function checkForConsecutiveMonthsReward() {
-  try {
-    // Only check for paid tiers
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    
-    const { data, error } = await supabase
-      .from('advertise')
-      .select('tier, date_created')
-      .eq('user_id', currentUser.id)
-      .neq('tier', 'free')
-      .gt('date_created', threeMonthsAgo.toISOString())
-      .order('date_created', { ascending: false });
-    
-    if (error) {
-      console.error('Error checking consecutive months:', error);
-      return;
-    }
-    
-    // Group advertisements by month
-    const advertsByMonth = {};
-    
-    data.forEach(ad => {
-      const date = new Date(ad.date_created);
-      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-      
-      if (!advertsByMonth[monthKey]) {
-        advertsByMonth[monthKey] = [];
-      }
-      
-      advertsByMonth[monthKey].push(ad);
-    });
-    
-    // Check if we have adverts in 3 different months
-    if (Object.keys(advertsByMonth).length >= 3) {
-      // Get the most recent paid advertisement
-      const recentAd = data[0];
-      
-      if (!recentAd) return;
-      
-      // Calculate reward based on tier
-      let reward = 0;
-      
-      switch (recentAd.tier) {
-        case 'basic':
-          reward = 6000; // 2x the tier cost
-          break;
-        case 'premium':
-          reward = 14000; // 2x the tier cost
-          break;
-        case 'ultra':
-          reward = 20000; // 2x the tier cost
-          break;
-      }
-      
-      if (reward > 0) {
-        // Update the user's balance with the reward
-        const { data: updatedProfile, error: rewardError } = await supabase
-          .from('profiles')
-          .update({ balance: userProfile.balance + reward })
-          .eq('id', currentUser.id)
-          .select();
-        
-        if (rewardError) {
-          console.error('Error updating balance with reward:', rewardError);
-        } else {
-          userProfile = updatedProfile[0];
-          updateBalanceDisplay();
-          showNotification(`Congratulations! You've earned a loyalty reward of ₦${reward.toLocaleString()} for advertising with us for 3 consecutive months!`, 'success');
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error in checkForConsecutiveMonthsReward:', error);
+    // Redirect to login page if not authenticated
+    window.location.href = 'home.html';
   }
 }
 
@@ -455,6 +75,7 @@ function setupIntersectionObserver() {
       if (entry.isIntersecting) {
         // Start timer when ad comes into view
         if (currentUser && !isUserAd && !viewedAdvertIds.has(advertId)) {
+          // Clear any existing timeout for this ad
           if (viewTimeouts[advertId]) {
             clearTimeout(viewTimeouts[advertId]);
           }
@@ -477,39 +98,235 @@ function setupIntersectionObserver() {
   }, { threshold: 0.5 }); // At least 50% visible
 }
 
-// Start polling for view count updates
-function startViewCountPolling() {
-  setInterval(async () => {
-    try {
-      const { data: adverts, error } = await supabase
-        .from('advertise')
-        .select('id, view_count');
-      
-      if (error) {
-        console.error('Error fetching view counts:', error);
-        return;
-      }
-      
-      // Update the view counts in the UI
-      adverts.forEach(advert => {
-        updateAdvertViewCount(advert.id, advert.view_count);
-      });
-    } catch (error) {
-      console.error('Error during view count polling:', error);
+// Fetch user profile from Supabase
+async function fetchUserProfile() {
+  if (!currentUser) return;
+  
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', currentUser.id)
+    .single();
+  
+  if (error) {
+    console.error('Error fetching user profile:', error);
+    return;
+  }
+  
+  userProfile = data;
+}
+
+// Fetch cart count
+async function fetchCartCount() {
+  if (!currentUser) return;
+  
+  const { count, error } = await supabase
+    .from('cart_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', currentUser.id);
+  
+  if (error) {
+    console.error('Error fetching cart count:', error);
+    return;
+  }
+  
+  const countValue = count || 0;
+  if (cartCountElement) cartCountElement.textContent = countValue;
+  if (mobileCartCountElement) mobileCartCountElement.textContent = countValue;
+}
+
+// Fetch wishlist count
+async function fetchWishlistCount() {
+  if (!currentUser) return;
+  
+  const { count, error } = await supabase
+    .from('wishlist_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', currentUser.id);
+  
+  if (error) {
+    console.error('Error fetching wishlist count:', error);
+    return;
+  }
+  
+  const countValue = count || 0;
+  if (wishlistCountElement) wishlistCountElement.textContent = countValue;
+  if (mobileWishlistCountElement) mobileWishlistCountElement.textContent = countValue;
+}
+
+// Update UI with user data
+function updateUI() {
+  if (userProfile) {
+    const displayName = userProfile.full_name || userProfile.email || 'User';
+    if (userNameElement) userNameElement.textContent = displayName;
+    if (mobileUserNameElement) mobileUserNameElement.textContent = displayName;
+    
+    if (userBalanceElement) {
+      userBalanceElement.textContent = userProfile.balance ? userProfile.balance.toLocaleString('en-NG') : '0.00';
     }
-  }, VIEW_COUNT_POLL_INTERVAL);
+  }
+}
+
+// Fetch advertisements from Supabase
+async function fetchAdvertisements() {
+  try {
+    console.log('Fetching advertisements...');
+    
+    // First get all approved ads that haven't expired
+    const { data: approvedAds, error: approvedError } = await supabase
+      .from('advertise')
+      .select('*')
+      .eq('is_approved', true)
+      .gt('expiry_date', new Date().toISOString())
+      .order('display_priority', { ascending: false })
+      .order('date_created', { ascending: false });
+    
+    if (approvedError) {
+      console.error('Error fetching approved advertisements:', approvedError);
+      return;
+    }
+    
+    // Then get user's own ads if they're logged in
+    let userAds = [];
+    if (currentUser) {
+      const { data: myAds, error: myAdsError } = await supabase
+        .from('advertise')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('date_created', { ascending: false });
+      
+      if (myAdsError) {
+        console.error('Error fetching user advertisements:', myAdsError);
+      } else {
+        userAds = myAds || [];
+      }
+    }
+    
+    // Combine and deduplicate ads
+    const combinedAds = [...approvedAds];
+    
+    // Add user ads that aren't already in the approved list
+    userAds.forEach(userAd => {
+      if (!combinedAds.some(ad => ad.id === userAd.id)) {
+        combinedAds.push(userAd);
+      }
+    });
+    
+    console.log(`Found ${combinedAds.length} advertisements`);
+    displayAdvertisements(combinedAds);
+  } catch (error) {
+    console.error('Error in fetchAdvertisements:', error);
+  }
+}
+
+// Display advertisements in the UI
+function displayAdvertisements(adverts) {
+  if (!advertsContainer) return;
+  
+  // Remove any existing observers
+  if (observer) {
+    document.querySelectorAll('.advert-card').forEach(ad => {
+      observer.unobserve(ad);
+    });
+  }
+  
+  advertsContainer.innerHTML = '';
+  
+  if (!adverts || adverts.length === 0) {
+    advertsContainer.innerHTML = `
+      <div class="no-adverts">
+        <p>No advertisements to display.</p>
+        <p>Be the first to advertise your product or service!</p>
+      </div>
+    `;
+    return;
+  }
+  
+  adverts.forEach(advert => {
+    const isUserAd = currentUser && advert.user_id === currentUser.id;
+    const isPremiumTier = advert.tier === 'ultra';
+    const expiryDate = new Date(advert.expiry_date);
+    const now = new Date();
+    const isExpired = expiryDate < now;
+    
+    const advertElement = document.createElement('div');
+    advertElement.className = `advert-card ${isUserAd ? 'user-ad' : ''} ${isExpired ? 'expired' : ''}`;
+    advertElement.dataset.id = advert.id;
+    
+    let statusLabel = '';
+    if (isUserAd) {
+      if (!advert.is_approved && !isExpired) {
+        statusLabel = '<span class="status pending">Pending Approval</span>';
+      } else if (isExpired) {
+        statusLabel = '<span class="status expired">Expired</span>';
+      } else {
+        statusLabel = '<span class="status active">Active</span>';
+      }
+    }
+    
+    const contactSection = isPremiumTier && advert.contact_email && advert.is_approved 
+      ? `<div class="advert-contact">Contact: ${advert.contact_email}</div>` 
+      : '';
+    
+    const imageSection = advert.image_url 
+      ? `<img src="${advert.image_url}" alt="${advert.title}" class="advert-image">` 
+      : '';
+    
+    // Format view count to be more social media like
+    const viewCount = advert.view_count || 0;
+    const formattedViewCount = formatViewCount(viewCount);
+    
+    advertElement.innerHTML = `
+      <div class="advert-header">
+        ${statusLabel}
+        <h3 class="advert-title">${advert.title}</h3>
+        <div class="view-count">
+          <i class="fas fa-eye"></i> <span class="view-number" data-raw-count="${viewCount}">${formattedViewCount}</span>
+        </div>
+      </div>
+      ${imageSection}
+      <div class="advert-content">${advert.content}</div>
+      ${contactSection}
+      <div class="advert-meta">
+        <span>Tier: ${getTierName(advert.tier)}</span>
+        <span>Expires: ${formatDate(advert.expiry_date)}</span>
+      </div>
+    `;
+    
+    advertsContainer.appendChild(advertElement);
+    
+    // Start observing this advert for visibility if not the user's own
+    if (!isUserAd && !isExpired && advert.is_approved && observer) {
+      observer.observe(advertElement);
+    }
+  });
+}
+
+// Format view count for display in social media style
+function formatViewCount(count) {
+  if (count < 1000) {
+    return count.toString(); // Show exact number for small counts
+  } else if (count < 1000000) {
+    return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K'; // e.g., 5.1K
+  } else {
+    return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'; // e.g., 2.4M
+  }
 }
 
 // Record view for an advertisement
 async function recordAdvertView(advertId) {
   try {
+    console.log(`Recording view for advert ${advertId}`);
+    
     if (!currentUser) {
+      console.log('Cannot record view: User not logged in');
       return;
     }
     
-    // Call the increment_advert_view RPC function
+    // Call the increment_advert_view function with user ID
     const { data, error } = await supabase.rpc('increment_advert_view', {
-      advert_id: advertId
+      advert_id: advertId,
+      viewer_id: currentUser.id
     });
     
     if (error) {
@@ -517,9 +334,12 @@ async function recordAdvertView(advertId) {
       return;
     }
     
+    console.log(`View recorded for advert ${advertId}. New count: ${data}`);
+    
+    // Update view count in UI immediately
     updateAdvertViewCount(advertId, data);
   } catch (error) {
-    console.error('Error in recordAdvertView:', error);
+    console.error('Error recording view:', error);
   }
 }
 
@@ -530,131 +350,280 @@ function updateAdvertViewCount(advertId, newCount) {
   if (advertElement) {
     const viewCountElement = advertElement.querySelector('.view-number');
     if (viewCountElement) {
+      // Store the raw count as a data attribute for future reference
+      viewCountElement.setAttribute('data-raw-count', newCount);
+      // Display the formatted count
       viewCountElement.textContent = formatViewCount(newCount);
     }
   }
 }
 
-// Format view count for display
-function formatViewCount(count) {
-  if (!count) return '0';
-  
-  if (count < 1000) {
-    return count.toString();
-  } else if (count < 1000000) {
-    return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-  } else {
-    return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+// Get tier name from tier value
+function getTierName(tier) {
+  switch (tier) {
+    case 'free': return 'Free';
+    case 'basic': return 'Basic';
+    case 'premium': return 'Premium';
+    case 'ultra': return 'Ultra Premium';
+    default: return 'Unknown';
   }
 }
 
-// Fetch advertisements from Supabase
-async function fetchAdvertisements() {
-  try {
-    advertsContainer.innerHTML = '<div class="loading">Loading advertisements...</div>';
-    
-    // Fetch active advertisements
-    const { data: adverts, error } = await supabase
-      .from('advertise')
-      .select('*')
-      .eq('is_approved', true)
-      .gt('expiry_date', new Date().toISOString())
-      .order('display_priority', { ascending: false })
-      .order('date_created', { ascending: false });
-    
-    if (error) {
-      console.error('Error fetching advertisements:', error);
-      advertsContainer.innerHTML = '<div class="error">Failed to load advertisements</div>';
-      return;
-    }
-    
-    if (!adverts || adverts.length === 0) {
-      advertsContainer.innerHTML = '<div class="no-results">No active advertisements found</div>';
-      return;
-    }
-    
-    displayAdvertisements(adverts);
-  } catch (error) {
-    console.error('Error in fetchAdvertisements:', error);
-    advertsContainer.innerHTML = '<div class="error">An error occurred while loading advertisements</div>';
+// Get tier cost from tier value
+function getTierCost(tier) {
+  switch (tier) {
+    case 'free': return 0;
+    case 'basic': return 3000;
+    case 'premium': return 7000;
+    case 'ultra': return 10000;
+    default: return 0;
   }
 }
 
-// Display advertisements in the UI
-function displayAdvertisements(adverts) {
-  advertsContainer.innerHTML = '';
-  
-  adverts.forEach(advert => {
-    const isUserAd = currentUser && advert.user_id === currentUser.id;
-    const hasContactInfo = advert.tier === 'ultra' && advert.contact_email;
-    
-    const advertElement = document.createElement('div');
-    advertElement.className = `advert-card ${isUserAd ? 'user-ad' : ''}`;
-    advertElement.dataset.id = advert.id;
-    
-    let imageHtml = '';
-    if (advert.image_url) {
-      imageHtml = `<img src="${advert.image_url}" alt="${advert.title}" class="advert-image">`;
-    }
-    
-    let contactHtml = '';
-    if (hasContactInfo) {
-      contactHtml = `
-        <div class="advert-contact">
-          <strong>Contact:</strong> ${advert.contact_email}
-        </div>
-      `;
-    }
-    
-    const createdDate = new Date(advert.date_created).toLocaleDateString();
-    const expiryDate = new Date(advert.expiry_date).toLocaleDateString();
-    
-    advertElement.innerHTML = `
-      ${imageHtml}
-      <div class="advert-content">
-        <h3 class="advert-title">${advert.title}</h3>
-        <p class="advert-description">${advert.content}</p>
-        ${contactHtml}
-        <div class="advert-meta">
-          <span class="advert-tier ${advert.tier}">${advert.tier.charAt(0).toUpperCase() + advert.tier.slice(1)}</span>
-          <span class="view-count">
-            <i class="fas fa-eye"></i>
-            <span class="view-number">${formatViewCount(advert.view_count)}</span> views
-          </span>
-        </div>
-        <div class="advert-dates">
-          <small>Posted: ${createdDate} • Expires: ${expiryDate}</small>
-        </div>
-      </div>
-    `;
-    
-    advertsContainer.appendChild(advertElement);
-    
-    // Observe this advert element for visibility
-    if (observer) {
-      observer.observe(advertElement);
-    }
+// Format date for display
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-NG', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
   });
 }
 
-// Show status message on the form
-function showStatusMessage(message, type) {
-  statusMessage.textContent = message;
-  statusMessage.className = `status-message ${type}`;
+// Handle advertisement form submission
+async function handleAdvertSubmit(event) {
+  event.preventDefault();
   
-  // Hide after 5 seconds
+  if (!currentUser) {
+    showMessage('You must be logged in to place an advertisement.', 'error');
+    return;
+  }
+  
+  const title = document.getElementById('title').value.trim();
+  const content = document.getElementById('content').value.trim();
+  const contactEmail = document.getElementById('contact-email').value.trim();
+  const imageUrl = document.getElementById('image-url').value.trim();
+  const tierRadios = document.querySelector('input[name="tier"]:checked');
+  
+  if (!title || !content) {
+    showMessage('Please fill in all required fields.', 'error');
+    return;
+  }
+  
+  if (!tierRadios) {
+    showMessage('Please select a tier.', 'error');
+    return;
+  }
+  
+  const tier = tierRadios.value;
+  
+  // Check if user has sufficient balance for selected tier
+  const tierCost = getTierCost(tier);
+  if (userProfile.balance < tierCost) {
+    showMessage(`Insufficient balance. You need ₦${tierCost.toLocaleString('en-NG')} for this tier.`, 'error');
+    return;
+  }
+  
+  try {
+    // Show loading message
+    showMessage('Processing your advertisement...', 'info');
+    
+    // Call database functions for expiry date and display priority
+    const { data: expiryData, error: expiryError } = await supabase.rpc('calculate_expiry_date', { tier });
+    if (expiryError) throw expiryError;
+    
+    const { data: priorityData, error: priorityError } = await supabase.rpc('calculate_display_priority', { tier });
+    if (priorityError) throw priorityError;
+    
+    // Prepare advertisement data
+    const advertData = {
+      user_id: currentUser.id,
+      title,
+      content,
+      contact_email: contactEmail || null,
+      image_url: imageUrl || null,
+      tier,
+      expiry_date: expiryData,
+      display_priority: priorityData,
+      is_approved: tier === 'free', // Auto-approve free tier for demo purposes
+      viewed_by: [], // Empty array of users who viewed this ad
+      view_count: 0 // Initialize view count to zero
+    };
+    
+    // Submit to Supabase
+    const { data, error } = await supabase
+      .from('advertise')
+      .insert(advertData)
+      .select();
+    
+    if (error) throw error;
+    
+    // Show success message and reset form
+    showMessage('Advertisement placed successfully!', 'success');
+    if (advertForm) {
+      advertForm.reset();
+    }
+    
+    // Refresh user profile to get updated balance
+    await fetchUserProfile();
+    updateUI();
+    
+    // The new advertisement will be shown via the realtime subscription
+  } catch (error) {
+    console.error('Error submitting advertisement:', error);
+    showMessage('Error placing advertisement: ' + error.message, 'error');
+  }
+}
+
+// Show form message (success, error, info)
+function showMessage(message, type) {
+  if (!formMessage) return;
+  
+  formMessage.textContent = message;
+  formMessage.className = `form-message ${type}`;
+  
+  // Hide message after 5 seconds
   setTimeout(() => {
-    statusMessage.className = 'status-message';
+    formMessage.textContent = '';
+    formMessage.className = 'form-message';
   }, 5000);
 }
 
-// Show notification
-function showNotification(message, type = 'info') {
-  notificationElement.textContent = message;
-  notificationElement.className = `notification ${type} show`;
-  
-  // Hide after 5 seconds
-  setTimeout(() => {
-    notificationElement.className = 'notification';
-  }, 5000);
+// Handle logout
+async function handleLogout() {
+  try {
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.error('Error logging out:', error);
+      return;
+    }
+    
+    window.location.href = 'home.html';
+  } catch (error) {
+    console.error('Error during logout:', error);
+  }
 }
+
+// Set up realtime subscription for advertisement changes
+function setupRealtimeSubscription() {
+  advertsChannel = supabase
+    .channel('adverts-changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'advertise' },
+      (payload) => {
+        console.log('Advertisement change detected:', payload);
+        
+        // If this is a view count update, just update that specific element
+        if (payload.eventType === 'UPDATE' && 
+            payload.new && payload.old && 
+            payload.new.view_count !== payload.old.view_count) {
+          
+          updateAdvertViewCount(payload.new.id, payload.new.view_count);
+        } else {
+          // For other changes, refresh the full list
+          fetchAdvertisements();
+        }
+      }
+    )
+    .subscribe();
+  
+  console.log('Realtime subscription set up for advertisements');
+  return advertsChannel;
+}
+
+// Toggle user dropdown
+function toggleUserDropdown() {
+  if (userDropdown) {
+    userDropdown.classList.toggle('show');
+  }
+}
+
+// Toggle mobile menu
+function toggleMobileMenu() {
+  if (mobileMenu) {
+    mobileMenu.classList.toggle('show');
+  }
+}
+
+// Close dropdown when clicking outside
+function handleOutsideClick(event) {
+  if (userIcon && userDropdown && !userIcon.contains(event.target) && !userDropdown.contains(event.target)) {
+    userDropdown.classList.remove('show');
+  }
+}
+
+// Clean up function for page unload
+function cleanupResources() {
+  // Clear all view timeouts
+  Object.keys(viewTimeouts).forEach(id => {
+    clearTimeout(viewTimeouts[id]);
+  });
+  
+  // Remove realtime subscription
+  if (advertsChannel) {
+    supabase.removeChannel(advertsChannel);
+  }
+  
+  // Disconnect the observer
+  if (observer) {
+    document.querySelectorAll('.advert-card').forEach(ad => {
+      observer.unobserve(ad);
+    });
+  }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('Document loaded, setting up event listeners...');
+  
+  // Check authentication status and set up UI
+  checkAuth();
+  
+  // Fetch advertisements
+  fetchAdvertisements();
+  
+  // Set up realtime subscription
+  setupRealtimeSubscription();
+  
+  // Form submission
+  if (advertForm) {
+    advertForm.addEventListener('submit', handleAdvertSubmit);
+  }
+  
+  // User dropdown toggle
+  if (userIcon) {
+    userIcon.addEventListener('click', function(e) {
+      e.preventDefault();
+      toggleUserDropdown();
+    });
+  }
+  
+  // Mobile menu toggle
+  if (mobileMenuToggle) {
+    mobileMenuToggle.addEventListener('click', toggleMobileMenu);
+  }
+  
+  // Mobile menu close
+  if (mobileMenuClose) {
+    mobileMenuClose.addEventListener('click', toggleMobileMenu);
+  }
+  
+  // Logout buttons
+  if (logoutButton) {
+    logoutButton.addEventListener('click', handleLogout);
+  }
+  
+  if (mobileLogoutButton) {
+    mobileLogoutButton.addEventListener('click', handleLogout);
+  }
+  
+  // Close dropdown when clicking outside
+  document.addEventListener('click', handleOutsideClick);
+  
+  // Clean up on page unload
+  window.addEventListener('beforeunload', cleanupResources);
+  
+  console.log('Event listeners set up successfully');
+});
