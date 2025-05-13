@@ -41,7 +41,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Load products from Supabase
     await loadProducts(supabase);
 
-    // Wait for DOM content to load
     // Initialize UI functionality
     initUI();
 
@@ -56,14 +55,34 @@ async function loadProducts(supabase) {
   try {
     const productsGrid = document.getElementById('products-grid');
     
-    // Fetch products from Supabase
-    const { data: products, error } = await supabase
+    // Fetch products in the price range 10,000–20,000 Naira
+    let { data: products, error } = await supabase
       .from('products')
       .select('*')
+      .gte('price', 10000) // Greater than or equal to 10,000
+      .lte('price', 20000) // Less than or equal to 20,000
+      .order('price', { ascending: false }) // Sort by price (descending)
       .limit(4);
     
     if (error) {
       throw error;
+    }
+    
+    // If fewer than 4 products, fetch additional products
+    if (products.length < 4) {
+      const remainingLimit = 4 - products.length;
+      const { data: additionalProducts, error: additionalError } = await supabase
+        .from('products')
+        .select('*')
+        .lt('price', 10000) // Fetch products below 10,000 as fallback
+        .order('price', { ascending: false })
+        .limit(remainingLimit);
+      
+      if (additionalError) {
+        throw additionalError;
+      }
+      
+      products = [...products, ...additionalProducts];
     }
     
     // Clear loading indicator
