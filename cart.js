@@ -41,7 +41,7 @@
     { name: "Ondo", fee: 6000 },
     { name: "Osun", fee: 6000 },
     { name: "Oyo", fee: 5900 },
-    { name: "Plateau", fee: 10,000 },
+    { name: "Plateau", fee: 10000 },
     { name: "Rivers", fee: 8300 },
     { name: "Sokoto", fee: 9500 },
     { name: "Taraba", fee: 12000 },
